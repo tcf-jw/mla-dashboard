@@ -47,21 +47,36 @@ worldbank → abs. `export_parquet` runs once per table at that table's completi
 - slaughter_production (2,064), nlrs_slaughter (8,459), exports (583),
   global_cattle_prices (462), fx_rates (1,139)
 
-### NOT YET RUN — pending tomorrow:
-- **herd_flock** (report 2, year-based) — table does not exist yet
-- **usda_psd** (USDA PSD) — table does not exist yet
-- **usda_ams 90CL/VL** (lean beef) — `lean_beef_prices` table does not exist yet
-- **worldbank** (85VL beef) — writes to `lean_beef_prices`
-- **abs** (ABS) — pending
+### Pending-source health — SMOKE-TESTED 2026-06-18 (window 2025-01-01..2026-06-18, yrs 2025/26)
+Tested each pending source at narrow scope before committing to a full backfill. Result:
+**5 of 6 are blocked or broken** — a full backfill will NOT pull them. Do not run a full
+backfill until these are resolved; it only re-pulls MLA reports (already done) + fx.
 
-## Tomorrow's plan
-1. `PYTHONPATH=src python -m mla_dashboard.refresh --backfill` again.
+| Source | Test result | Blocker / action |
+|--------|-------------|------------------|
+| fx_rates | ✅ 372 rows | works — no action |
+| usda_ams **90CL/VL** | ⛔ skipped | **`USDA_AMS_API_KEY` not set.** Register at https://mymarketnews.ams.usda.gov/ , set env var. This is the headline goal. |
+| usda_psd | ⛔ skipped | **`USDA_PSD_API_KEY` not set.** Free key at api.data.gov, set env var. |
+| herd_flock | ❌ 0 rows | report 2 (`/report/2?year=Y`) returns 0 rows for 2023/24/25 — endpoint/param drift, needs debugging in `ingest_mla.ingest_herd` / API shape. |
+| worldbank 85VL | ❌ no data | `worldbank.ingest` returns nothing even from 2010 — endpoint likely changed, needs debugging. |
+| abs | ⛔ 403 | `https://data.api.abs.gov.au/data/LIVESTOCK_MEAT/...` returns 403 Forbidden — auth/endpoint change. |
+
+No `.env` file exists and no USDA/ABS keys are in the environment (checked 2026-06-18).
+Smoke-test calls mutated DB/parquet (fx top-up) but were **reverted** (`git restore data/`) —
+working tree is clean at the last commit.
+
+## Resume plan (blocked until keys + fixes)
+1. **You:** obtain + set `USDA_AMS_API_KEY` (90CL) and `USDA_PSD_API_KEY`. Persist via env or a
+   `.env` (confirm the code loads `.env` — currently it only reads `os.environ`).
+2. **Debug** the 3 broken/forbidden sources separately (herd report 2, worldbank, abs) — these
+   are code/endpoint bugs, independent of the backfill.
+3. Re-run the narrow smoke test to confirm each source returns rows.
+4. Only then: `PYTHONPATH=src python -m mla_dashboard.refresh --backfill`.
    - Idempotent: completed tables (indicators/yardings) upsert on natural PK, no dupes.
-   - Backfill is slow (~1h); indicators is the slow part. Stdout is buffered when not a tty —
-     watch progress via DB growth: `ls -la data/mla.db` and per-table row counts instead.
-2. Confirm new tables populated: herd_flock, usda_psd, lean_beef_prices.
-3. Re-export any tables if needed, then commit `data/parquet/` + push to main.
-4. Report per-source row counts and any `skip ...` lines (API errors) from the run.
+   - Slow (~1h); indicators is the slow part. Stdout buffered when not a tty — watch progress
+     via DB growth: `ls -la data/mla.db` + per-table row counts.
+5. Confirm new tables populated: herd_flock, usda_psd, lean_beef_prices.
+6. Commit `data/parquet/` + push to main. Report per-source row counts + any `skip ...` lines.
 
 ## Gotchas
 - `data/mla.db` (~16 MB) is git-tracked but we commit **only `data/parquet/`** per the task.
