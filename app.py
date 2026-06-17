@@ -26,7 +26,13 @@ st.set_page_config(page_title="MLA Pricing & Supply", layout="wide")
 
 # Use the full viewport width for charts.
 st.markdown(
-    "<style>.block-container{max-width:98%;padding-top:1.2rem;}</style>",
+    """<style>
+    .block-container{max-width:98%;padding-top:1.2rem;}
+    @media(max-width:640px){
+        .block-container{padding-left:0.25rem!important;padding-right:0.25rem!important;}
+        .stTabs [data-baseweb="tab"]{padding:0.4rem 0.5rem;font-size:0.8rem;}
+    }
+    </style>""",
     unsafe_allow_html=True,
 )
 
@@ -87,7 +93,11 @@ def _break_gaps(sub, date_col, freq_label):
 def _style(fig: go.Figure, height: int = 560) -> go.Figure:
     """Range buttons + unified hover for charts that don't use the frequency switcher."""
     fig.update_traces(mode="lines+markers", marker=dict(size=4))
-    fig.update_layout(height=height, hovermode="x unified", legend_title_text="")
+    fig.update_layout(
+        height=height, hovermode="x unified", legend_title_text="",
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+        margin=dict(b=90),
+    )
     fig.update_xaxes(
         type="date", showspikes=True, spikemode="across", spikethickness=1,
         rangeselector=RANGE_BUTTONS, rangeslider=dict(visible=False),
@@ -95,7 +105,7 @@ def _style(fig: go.Figure, height: int = 560) -> go.Figure:
     return fig
 
 
-def freq_chart(df, date_col, group_col, how, ylabel, height=600, fill=False):
+def freq_chart(df, date_col, group_col, how, ylabel, height=600, fill=False, default_freq_idx=0):
     """Stock-chart style figure with BOTH controls on the chart:
 
     - top-left buttons switch Frequency (Daily/Weekly/Monthly/Yearly) by toggling
@@ -117,7 +127,7 @@ def freq_chart(df, date_col, group_col, how, ylabel, height=600, fill=False):
                 mode="lines+markers", marker=dict(size=4, color=color[g]),
                 line=dict(color=color[g]), legendgroup=str(g),
                 fill="tozeroy" if fill else None, connectgaps=False,
-                visible=(fi == 0), showlegend=(fi == 0),
+                visible=(fi == default_freq_idx), showlegend=(fi == default_freq_idx),
             ))
             trace_freq.append(fi)
     buttons = []
@@ -126,10 +136,11 @@ def freq_chart(df, date_col, group_col, how, ylabel, height=600, fill=False):
         buttons.append(dict(label=fq, method="update", args=[{"visible": mask, "showlegend": mask}]))
     fig.update_layout(
         height=height, hovermode="x unified", legend_title_text="", yaxis_title=ylabel,
-        margin=dict(t=70),
+        legend=dict(orientation="h", yanchor="top", y=-0.15, xanchor="center", x=0.5),
+        margin=dict(t=120, b=90),
         updatemenus=[dict(
-            type="buttons", direction="right", x=1, y=1.12,
-            xanchor="right", yanchor="bottom", showactive=True, active=0,
+            type="buttons", direction="right", x=1, y=1.27,
+            xanchor="right", yanchor="bottom", showactive=True, active=default_freq_idx,
             bgcolor=PILL_BG, bordercolor=PILL_BORDER, font=PILL_FONT,
             buttons=buttons, pad=dict(t=2, b=2, l=2, r=2),
         )],
@@ -270,7 +281,7 @@ with exports_tab:
     else:
         top = ex.groupby("country")["value"].sum().nlargest(10).index
         sub = ex[ex["country"].isin(top)]
-        fig = freq_chart(sub, "result_date", "country", analysis.SUM, "Weight", fill=True)
+        fig = freq_chart(sub, "result_date", "country", analysis.SUM, "Weight", fill=True, default_freq_idx=2)
         st.plotly_chart(fig, width='stretch')
 
 with analysis_tab:
