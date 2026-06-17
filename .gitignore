@@ -1,0 +1,14 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+
+# SQLite sidecar files (WAL/SHM are transient; the .db itself IS committed)
+*.db-wal
+*.db-shm
+
+# Tooling junk
+.playwright-mcp/
+
+# Data is public — committed on purpose (data/mla.db, data/parquet/).
