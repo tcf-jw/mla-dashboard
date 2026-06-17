@@ -29,26 +29,33 @@ python -m mla_dashboard.refresh              # later: incremental top-up
 ## Using the dashboard
 
 Tabs:
-- **Prices** — AU indicators (EYCI etc.).
+- **Prices** — AU indicators (EYCI etc.), with latest-value + 1-month change KPIs.
 - **Supply** — slaughter/production by category, location, measure.
-- **Supply vs Price** — dual-axis price vs slaughter/production volume, **filtered by
+- **Supply/Price** — dual-axis price vs slaughter/production volume, **filtered by
   species** (Cattle / Sheep). Price indicators carry a `species_id` and supply rows a
   `category`, so both sides filter to the same species; shows their correlation.
 - **Global** — AU vs world cattle prices.
-- **Exports** — top destination markets.
+- **Exports** — top destination markets (selectable N).
+- **90CL/VL** — US lean / trim beef prices by chemical-lean grade (90CL, 85CL, 50CL …),
+  the reference for Australian export grinding beef. Source: USDA AMS (see below).
 - **Analysis** — AU–global spread + correlation.
 
-**Currency:** dropdown **top-left** (AUD/USD) — re-prices every chart via **date-matched**
+Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
+freshness** (latest date held).
+
+**Currency:** radio in the **sidebar** (AUD/USD) — re-prices every chart via **date-matched**
 FX (a 2015 price uses the 2015 rate, not today's).
 
-**On-chart controls (stock-chart style):** both controls live on the chart, no rerun —
-- **Frequency** buttons top-left (**Daily / Weekly / Monthly / Yearly**) toggle
-  pre-resampled traces. Auto method: **prices averaged**, **volumes summed** per period.
-- **Range** buttons top-right (**7D / 14D / 1M / 3M / 6M / 1Y / ALL**) zoom the x-axis.
-  ALL = full history. (No range-slider mini-graph.)
+**Chart controls:**
+- **Frequency** — native radio above each chart (**Daily / Weekly / Monthly / Yearly**).
+  Method is automatic: **prices averaged**, **volumes summed** per period.
+- **Range** buttons on the chart (**1M / 3M / 6M / 1Y / ALL**) zoom the x-axis;
+  pinch/drag for finer zoom. ALL = full history.
+- **Unified hover** — point anywhere along the x-axis and a floating box lists every
+  series' value for that day; a spike line marks the date.
 
-**Charts:** unified hover — point anywhere along the x-axis and a floating box lists every
-series' value for that day; a spike line marks the date and points show as markers.
+The layout is responsive: on a phone the currency/freshness controls collapse into the
+sidebar, the frequency radio gives large tap targets, and the legend sits below the chart.
 
 ---
 
@@ -72,10 +79,23 @@ cloud auto-redeploys.
 | MLA Statistics API (`api-mlastatistics.mla.com.au`) | AU indicators (EYCI etc.), slaughter & production, herd & flock, yardings, NLRS slaughter, red meat exports, global cattle prices | None |
 | Frankfurter (`api.frankfurter.dev`) | Daily AUD/USD FX for currency conversion | None |
 | USDA PSD Online | Global cattle/beef supply by country | free `api.data.gov` key |
+| USDA AMS Market News (`marsapi.ams.usda.gov`) | **90CL / VL lean & trim beef prices** (grinding-beef reference) | free MARS API key |
 | ABS Data API | Official AU slaughter & meat production | None |
 
-For global supply, set the optional key before refreshing:
-`export USDA_PSD_API_KEY=your_key` (PowerShell: `$env:USDA_PSD_API_KEY="your_key"`).
+Set the optional keys before refreshing:
+- Global supply: `export USDA_PSD_API_KEY=your_key` (PowerShell: `$env:USDA_PSD_API_KEY="your_key"`).
+- 90CL/VL lean beef: request a free key at <https://mymarketnews.ams.usda.gov/> then
+  `export USDA_AMS_API_KEY=your_key` (PowerShell: `$env:USDA_AMS_API_KEY="your_key"`).
+  Without it, the refresh skips the 90CL/VL pull and the tab shows an empty state.
+
+### Running in a restricted network (Claude Code on the web, locked-down CI)
+
+The refresh reaches out to the hosts above. In a sandboxed environment with an **egress
+allowlist** these calls return `403 Host not in allowlist`. To pull data either:
+1. **Add the hosts to the egress allowlist** — at minimum `api-mlastatistics.mla.com.au`,
+   `api.frankfurter.dev`, and (for 90CL/VL) `marsapi.ams.usda.gov`; or
+2. **Run the refresh on a machine with open internet**, then commit the updated
+   `data/parquet/` so the deployed app picks it up.
 
 **API constraint:** the MLA API paginates at ~100 rows/page. `MLAClient.get_all()` walks
 every page automatically using the `"total number rows"` field, so callers always get the
@@ -126,7 +146,7 @@ src/mla_dashboard/
   ingest_mla.py  # fetch -> normalise -> upsert per report
   refresh.py     # incremental/backfill orchestrator (entry point)
   analysis.py    # to_currency(), supply_vs_price(), spreads, YoY
-  external/      # fx.py, usda_psd.py, abs.py
+  external/      # fx.py, usda_psd.py, usda_ams.py (90CL/VL), abs.py
 app.py                              # Streamlit dashboard
 Launch Dashboard.vbs                # no-terminal launcher (Windows)
 Refresh Data.vbs                    # no-terminal incremental refresh

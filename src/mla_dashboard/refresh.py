@@ -17,7 +17,7 @@ import datetime as dt
 from . import config, db
 from .client import MLAClient
 from .external import abs as abs_ext
-from .external import fx, usda_psd
+from .external import fx, usda_ams, usda_psd
 from .ingest_mla import ingest_herd, ingest_reference, ingest_report
 
 
@@ -50,6 +50,8 @@ def run(backfill: bool = False) -> None:
     # External sources (each skips gracefully on error / missing key).
     print(f"  fx_rates: {fx.ingest(config.BACKFILL_START if backfill else _from_date('fx_rates', 'date', False))} rows")
     print(f"  usda_psd: {usda_psd.ingest(years)} rows")
+    ams_start = config.BACKFILL_START if backfill else (_from_date("lean_beef_prices", "result_date", False))
+    print(f"  usda_ams (90CL/VL): {usda_ams.ingest(ams_start)} rows")
     print(f"  abs: {abs_ext.ingest()} rows")
     print("Refresh complete.")
 
