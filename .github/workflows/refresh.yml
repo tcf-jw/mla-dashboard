@@ -1,0 +1,70 @@
+name: Refresh data
+
+on:
+  schedule:
+    # Run at 6 AM AEST (UTC+10) every weekday — markets are reporting by then.
+    - cron: "0 20 * * 0-4"
+  workflow_dispatch:
+    inputs:
+      backfill:
+        description: "Force full history pull (--backfill)"
+        required: false
+        default: "false"
+        type: choice
+        options: ["false", "true"]
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # needed to commit updated Parquet files
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Use a PAT so the commit can trigger Streamlit Community Cloud's auto-redeploy.
+          # A default GITHUB_TOKEN push to the same branch does NOT trigger subsequent
+          # workflow runs, but it DOES trigger Streamlit's webhook which is all we need.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+
+      - name: Install dependencies
+        run: pip install -e .
+
+      - name: Refresh data
+        env:
+          USDA_PSD_API_KEY: ${{ secrets.USDA_PSD_API_KEY }}
+          USDA_AMS_API_KEY: ${{ secrets.USDA_AMS_API_KEY }}
+        run: |
+          if [ "${{ github.event.inputs.backfill }}" = "true" ]; then
+            python -m mla_dashboard.refresh --backfill
+          else
+            python -m mla_dashboard.refresh
+          fi
+
+      - name: Commit updated Parquet files
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/parquet/
+          # Only commit if something actually changed.
+          if git diff --cached --quiet; then
+            echo "No Parquet changes — data is already current."
+          else
+            DATES=$(python3 -c "
+          import sys; sys.path.insert(0,'src')
+          from mla_dashboard import db
+          pairs = [('indicators','calendar_date'),('exports','result_date'),('lean_beef_prices','result_date')]
+          parts = []
+          for t,c in pairs:
+              d = db.max_date(t,c)
+              if d: parts.append(f'{t}={d}')
+          print(', '.join(parts) or 'updated')
+          " 2>/dev/null || echo "updated")
+            git commit -m "chore: refresh data — $DATES [skip ci]"
+            git push
+          fi
