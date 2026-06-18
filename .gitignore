@@ -5,11 +5,14 @@ __pycache__/
 .venv/
 venv/
 
-# SQLite sidecar files (WAL/SHM are transient; the .db itself IS committed)
+# SQLite store is local-only: it's a build artifact regenerable from refresh, and
+# read_table() reads the .db before parquet — so a stale committed .db would shadow the
+# fresh parquet on Streamlit Cloud. Ship parquet only; let the cloud use the parquet path.
+*.db
 *.db-wal
 *.db-shm
 
 # Tooling junk
 .playwright-mcp/
 
-# Data is public — committed on purpose (data/mla.db, data/parquet/).
+# Data is public — the parquet snapshots in data/parquet/ are committed on purpose.
