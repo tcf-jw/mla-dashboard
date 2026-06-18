@@ -6,6 +6,7 @@ Handles the one real constraint of this API: responses are paginated at ~100 row
 
 from __future__ import annotations
 
+import datetime as dt
 import time
 from typing import Any, Iterator
 
@@ -33,13 +34,8 @@ class MLAClient:
         self.session = requests.Session()
         self.session.headers.update({"Accept": "application/json"})
 
-    @retry(
-        retry=retry_if_exception_type((requests.RequestException, MLAApiError)),
-        wait=wait_exponential(multiplier=1, min=1, max=30),
-        stop=stop_after_attempt(config.MAX_RETRIES),
-        reraise=True,
-    )
-    def _get(self, path: str, params: dict[str, Any]) -> dict:
+    def _request(self, path: str, params: dict[str, Any]) -> dict:
+        """Single HTTP attempt. Raises MLAApiError on 5xx/429 or an error envelope."""
         time.sleep(config.REQUEST_DELAY_S)
         resp = self.session.get(
             f"{self.base_url}{path}", params=params, timeout=config.REQUEST_TIMEOUT_S
@@ -56,6 +52,52 @@ class MLAClient:
                 raise MLAApiError(msg)
             raise MLAApiError(f"{path} {params}: {msg}")
         return body
+
+    @retry(
+        retry=retry_if_exception_type((requests.RequestException, MLAApiError)),
+        wait=wait_exponential(multiplier=1, min=1, max=30),
+        stop=stop_after_attempt(config.MAX_RETRIES),
+        reraise=True,
+    )
+    def _get(self, path: str, params: dict[str, Any]) -> dict:
+        return self._request(path, params)
+
+    def last_good_to(
+        self, report_id: int, params: dict[str, Any], from_date: str, to_date: str
+    ) -> str | None:
+        """Largest end date in [from_date, to_date] the API accepts for this query.
+
+        The API returns HTTP 500 whenever ``toDate`` runs past the latest published date
+        (even by a single empty day), which fails the whole chunk. Acceptance is monotonic
+        in ``toDate`` (ok up to the last available date, then 500s), so binary-search the
+        boundary with single-attempt probes — no retry/backoff, since these 500s are
+        deterministic, not transient. Returns an ISO date, or None if even ``from_date``
+        has no data (the whole window is past the available range).
+        """
+        lo = dt.date.fromisoformat(from_date)
+        hi = dt.date.fromisoformat(to_date)
+
+        def ok(end: dt.date) -> bool:
+            try:
+                self._request(
+                    f"/report/{report_id}",
+                    {**params, "fromDate": from_date, "toDate": end.isoformat(), "page": 1},
+                )
+                return True
+            except (MLAApiError, requests.RequestException):
+                return False
+
+        if ok(hi):
+            return hi.isoformat()
+        if not ok(lo):
+            return None
+        while (hi - lo).days > 1:  # invariant: ok(lo), not ok(hi)
+            mid = lo + (hi - lo) // 2
+            if ok(mid):
+                lo = mid
+            else:
+                hi = mid
+        return lo.isoformat()
 
     def get_reference(self, path: str) -> list[dict]:
         """Fetch a non-paginated reference list (/indicator, /saleyard, /report)."""

@@ -18,8 +18,9 @@ from .client import MLAClient, MLAApiError
 def _year_chunks(from_date: str, to_date: str):
     """Yield [start, end] ISO date pairs, one per calendar year.
 
-    The MLA API returns HTTP 500 on wide date ranges, so requests must be split into
-    yearly windows.
+    Chunking by year keeps each request modest and bounds the blast radius of a failed
+    window. (The API tolerates multi-year ranges, but 500s when ``toDate`` reaches the
+    current/future day — see ``ingest_report`` and ``MLAClient.last_good_to``.)
     """
     start = dt.date.fromisoformat(from_date)
     end = dt.date.fromisoformat(to_date)
@@ -54,7 +55,10 @@ def ingest_report(client: MLAClient, key: str, from_date: str, to_date: str) -> 
     """Ingest one registry report over [from_date, to_date], chunked by year.
 
     Fans out over the report's optional parameter (indicatorID / category / countryID)
-    and splits each into yearly windows to avoid the API's wide-range 500s.
+    and splits each into yearly windows. When a window's ``toDate`` runs past the latest
+    published date the API 500s the whole window, so on failure we binary-search the last
+    accepted end date and re-pull up to there — this stops a not-yet-published tail (e.g.
+    the current month) from dropping an entire year of data.
     """
     spec = config.REPORTS[key]
     written = 0
@@ -70,12 +74,21 @@ def ingest_report(client: MLAClient, key: str, from_date: str, to_date: str) -> 
 
     for fp in fan_params:
         for cf, ct in _year_chunks(from_date, to_date):
-            params = {**fp, "fromDate": cf, "toDate": ct}
             try:
-                rows = client.get_all(spec["report"], params)
+                rows = client.get_all(spec["report"], {**fp, "fromDate": cf, "toDate": ct})
             except MLAApiError as e:
-                print(f"  skip {key} {params}: {e}")
-                continue
+                # Likely an unpublished tail: find the last accepted end date and re-pull.
+                good = client.last_good_to(spec["report"], fp, cf, ct)
+                if good is None:
+                    print(f"  skip {key} {fp} {cf}..{ct}: no data ({e})")
+                    continue
+                if good != ct:
+                    print(f"  {key} {fp}: API rejects past {good}; pulling {cf}..{good}")
+                try:
+                    rows = client.get_all(spec["report"], {**fp, "fromDate": cf, "toDate": good})
+                except MLAApiError as e2:
+                    print(f"  skip {key} {fp} {cf}..{good}: {e2}")
+                    continue
             written += db.upsert(spec["table"], _normalise(rows, spec), spec["pk"])
     db.export_parquet(spec["table"])
     return written
