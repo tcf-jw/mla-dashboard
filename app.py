@@ -64,7 +64,7 @@ CHART_H = 460  # fits a phone screen with the legend below; comfortable on deskt
 
 # Max expected spacing per frequency; bigger jumps are real data gaps and the line is
 # broken across them instead of drawn as a misleading straight diagonal.
-GAP_DAYS = {"Daily": 5, "Weekly": 16, "Monthly": 70, "Yearly": 800}
+GAP_DAYS = {"Daily": 5, "Weekly": 16, "Monthly": 70, "Quarterly": 210, "Yearly": 800}
 
 
 def color_for(label) -> str:
@@ -93,15 +93,22 @@ def _break_gaps(sub, date_col, freq_label):
     return pd.DataFrame(rows)
 
 
-def freq_radio(key: str, default: str = "Weekly") -> str:
+def freq_radio(key: str, df, date_col: str, group_cols=None) -> str:
     """Native, touch-friendly frequency switcher shown above a chart.
 
+    Options are derived from the data: only the chart's native cadence and coarser are
+    offered (a monthly series won't offer Daily/Weekly), and the default is the native
+    cadence. This avoids resampling to a granularity the data never had — which would only
+    invent empty periods. Reruns on change; cached reads keep it snappy.
+
     Replaces the old on-chart Plotly buttons, which overlapped the range buttons and were
-    too small to tap on a phone. Reruns on change; cached reads keep it snappy.
+    too small to tap on a phone.
     """
-    opts = list(analysis.FREQ.keys())
+    if isinstance(group_cols, str):
+        group_cols = [group_cols]
+    opts = analysis.freq_options(df, date_col, group_cols)
     return st.radio(
-        "Frequency", opts, index=opts.index(default), horizontal=True,
+        "Frequency", opts, index=0, horizontal=True,
         key=key, label_visibility="collapsed",
     )
 
@@ -258,9 +265,9 @@ with prices_tab:
                 col.metric(ind_label(int(s["indicator_id"].iloc[0]))[:22],
                            f"{latest:,.0f}", f"{delta:+.1f}% (1m)")
 
-            freq = freq_radio("prices_freq", "Daily")
             plot = pd.concat(frames)
             plot["label"] = plot["indicator_id"].map(ind_label)
+            freq = freq_radio("prices_freq", plot, "calendar_date", "label")
             fig = series_chart(plot, "calendar_date", "label", analysis.MEAN, f"Price ({currency})", freq)
             st.plotly_chart(fig, width="stretch")
             st.caption("Prices are averaged per period. Tap a legend item to toggle a series.")
@@ -283,7 +290,7 @@ with supply_tab:
             st.info("No rows for that selection.")
         else:
             unit = sub["unit"].dropna().iloc[0] if sub["unit"].notna().any() else ""
-            freq = freq_radio("supply_freq", "Monthly")
+            freq = freq_radio("supply_freq", sub, "report_date", "category")
             fig = series_chart(sub, "report_date", "category", analysis.SUM,
                                f"Volume ({unit})" if unit else "Volume", freq, si=True)
             st.plotly_chart(fig, width="stretch")
@@ -332,7 +339,7 @@ with global_tab:
         no_data("No global price data yet.")
     else:
         glc = analysis.to_currency(gl, currency, "indicator_date")
-        freq = freq_radio("global_freq", "Weekly")
+        freq = freq_radio("global_freq", glc, "indicator_date", "indicator_desc")
         fig = series_chart(glc, "indicator_date", "indicator_desc", analysis.MEAN,
                            f"Price ({currency})", freq)
         st.plotly_chart(fig, width="stretch")
@@ -347,7 +354,7 @@ with exports_tab:
         n = st.slider("Top destinations", 3, 12, 8)
         top = ex.groupby("country")["value"].sum().nlargest(n).index
         sub = ex[ex["country"].isin(top)]
-        freq = freq_radio("exports_freq", "Monthly")
+        freq = freq_radio("exports_freq", sub, "result_date", "country")
         fig = series_chart(sub, "result_date", "country", analysis.SUM, "Weight", freq,
                            fill=True, si=True)
         st.plotly_chart(fig, width="stretch")
@@ -367,7 +374,7 @@ with lean_tab:
         ser = st.selectbox("Report", series_opt)
         sub = lb[lb["series"] == ser]
         sub = analysis.to_currency(sub, currency, "result_date")
-        freq = freq_radio("lean_freq", "Weekly")
+        freq = freq_radio("lean_freq", sub, "result_date", "grade")
         fig = series_chart(sub, "result_date", "grade", analysis.MEAN,
                            f"Price ({currency}/cwt)", freq)
         st.plotly_chart(fig, width="stretch")

@@ -47,8 +47,12 @@ freshness** (latest date held).
 FX (a 2015 price uses the 2015 rate, not today's).
 
 **Chart controls:**
-- **Frequency** — native radio above each chart (**Daily / Weekly / Monthly / Yearly**).
-  Method is automatic: **prices averaged**, **volumes summed** per period.
+- **Frequency** — native radio above each chart (**Daily / Weekly / Monthly / Quarterly /
+  Yearly**). Options are **data-driven**: each chart detects its own native cadence and offers
+  only that and coarser (e.g. quarterly slaughter data shows Quarterly/Yearly, not Daily),
+  defaulting to the native cadence. Method is automatic: **prices averaged**, **volumes
+  summed** per period — and a period with no data breaks the line (a gap) rather than
+  plotting a misleading zero.
 - **Range** buttons on the chart (**1M / 3M / 6M / 1Y / ALL**) zoom the x-axis;
   pinch/drag for finer zoom. ALL = full history.
 - **Unified hover** — point anywhere along the x-axis and a floating box lists every

@@ -12,8 +12,15 @@ import pandas as pd
 from . import db
 
 
-# Resample frequency labels -> pandas offset aliases.
-FREQ = {"Daily": "D", "Weekly": "W", "Monthly": "MS", "Yearly": "YS"}
+# Resample frequency labels -> pandas offset aliases. Ordered finest -> coarsest;
+# FREQ_ORDER relies on this insertion order to decide which options a chart may show.
+FREQ = {"Daily": "D", "Weekly": "W", "Monthly": "MS", "Quarterly": "QS", "Yearly": "YS"}
+FREQ_ORDER = list(FREQ)  # ["Daily", "Weekly", "Monthly", "Quarterly", "Yearly"]
+
+# Upper bound (median days between points) for classifying a series' native cadence.
+# A series whose median spacing falls in a bucket is treated as that frequency; finer
+# options are hidden so the user can't resample to a granularity the data never had.
+_FREQ_MAX_DAYS = {"Daily": 3, "Weekly": 10, "Monthly": 45, "Quarterly": 120}
 
 # Lookback windows -> number of days back from the latest date (None = all history).
 WINDOWS = {
@@ -62,7 +69,12 @@ def resample(
     group_cols = group_cols or []
 
     def _agg(g: pd.DataFrame) -> pd.DataFrame:
-        return g.set_index(date_col)[value_col].resample(rule).agg(how).reset_index()
+        res = g.set_index(date_col)[value_col].resample(rule)
+        # sum(min_count=1) so a period with no data becomes NaN (a gap), not a misleading
+        # 0 — matters when a coarse-native series (e.g. monthly volumes) is viewed at a
+        # finer/mismatched frequency. mean() already yields NaN for empty periods.
+        agg = res.sum(min_count=1) if how == "sum" else res.agg(how)
+        return agg.reset_index()
 
     if group_cols:
         parts = []
@@ -76,6 +88,62 @@ def resample(
     else:
         out = _agg(d)
     return out.dropna(subset=[value_col])
+
+
+def native_freq(
+    df: pd.DataFrame,
+    date_col: str,
+    group_cols: list[str] | None = None,
+) -> str:
+    """Detect a chart's finest natural cadence and return a FREQ label.
+
+    Looks at the median spacing between consecutive dates within each series and returns
+    the finest (smallest-spacing) bucket across series, so a frequency that is meaningful
+    for at least one series is never hidden. Used to pick a chart's default frequency and
+    to hide options finer than the data ever had (which would only invent empty periods).
+    Falls back to "Daily" when cadence can't be determined (empty / single-point series).
+    """
+    if df.empty or date_col not in df.columns:
+        return "Daily"
+    d = df[[date_col, *(group_cols or [])]].copy()
+    d[date_col] = pd.to_datetime(d[date_col], errors="coerce")
+    d = d.dropna(subset=[date_col])
+    if d.empty:
+        return "Daily"
+
+    def _median_days(dates: pd.Series) -> float | None:
+        u = dates.drop_duplicates().sort_values()
+        if len(u) < 2:
+            return None
+        return float(u.diff().dropna().dt.days.median())
+
+    if group_cols:
+        spacings = [_median_days(g[date_col]) for _, g in d.groupby(group_cols)]
+    else:
+        spacings = [_median_days(d[date_col])]
+    spacings = [s for s in spacings if s is not None]
+    if not spacings:
+        return "Daily"
+
+    finest = min(spacings)
+    for label in FREQ_ORDER[:-1]:  # all but the coarsest (Yearly is the catch-all)
+        if finest <= _FREQ_MAX_DAYS[label]:
+            return label
+    return FREQ_ORDER[-1]
+
+
+def freq_options(
+    df: pd.DataFrame,
+    date_col: str,
+    group_cols: list[str] | None = None,
+) -> list[str]:
+    """Frequency labels a chart may offer: its native cadence and everything coarser.
+
+    Hiding finer-than-native options prevents resampling to a granularity the data never
+    had (which only manufactures empty/NaN periods).
+    """
+    native = native_freq(df, date_col, group_cols)
+    return FREQ_ORDER[FREQ_ORDER.index(native):]
 
 
 def load_fx() -> pd.DataFrame:
