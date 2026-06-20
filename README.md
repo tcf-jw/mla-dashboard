@@ -36,8 +36,10 @@ Tabs:
   `category`, so both sides filter to the same species; shows their correlation.
 - **Global** — AU vs world cattle prices.
 - **Exports** — top destination markets (selectable N).
-- **90CL/VL** — US lean / trim beef prices by chemical-lean grade (90CL, 85CL, 50CL …),
-  the reference for Australian export grinding beef. Source: USDA AMS (see below).
+- **90CL/VL** — lean / trim beef prices by chemical-lean grade (90CL, 85CL, 50CL …), the
+  reference for Australian export grinding beef. Two sources, pick via the **Report**
+  selector: MLA's indicative **imported 90CL** (AU CIF import-parity, AUD c/kg — manual
+  import, see below) and USDA AMS **US negotiated** sales (USD/cwt).
 - **Analysis** — AU–global spread + correlation.
 
 Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
@@ -83,14 +85,24 @@ cloud auto-redeploys.
 | MLA Statistics API (`api-mlastatistics.mla.com.au`) | AU indicators (EYCI etc.), slaughter & production, herd & flock, yardings, NLRS slaughter, red meat exports, global cattle prices | None |
 | Frankfurter (`api.frankfurter.dev`) | Daily AUD/USD FX for currency conversion | None |
 | USDA PSD Online | Global cattle/beef supply by country | free `api.data.gov` key |
-| USDA AMS Market News (`marsapi.ams.usda.gov`) | **90CL / VL lean & trim beef prices** (grinding-beef reference) | free MARS API key |
+| USDA AMS Market News (`marsapi.ams.usda.gov`) | **90CL / VL lean & trim beef prices** (US negotiated, grinding-beef reference) | free MARS API key |
+| MLA portal export (`data-manual/*.xlsx`) | **Imported 90CL price** (AU CIF import-parity, AUD c/kg, weekly) — MLA's API has no 90CL report | None (manual download) |
 | ABS Data API | Official AU slaughter & meat production | None |
 
 Set the optional keys before refreshing:
 - Global supply: `export USDA_PSD_API_KEY=your_key` (PowerShell: `$env:USDA_PSD_API_KEY="your_key"`).
 - 90CL/VL lean beef: request a free key at <https://mymarketnews.ams.usda.gov/> then
   `export USDA_AMS_API_KEY=your_key` (PowerShell: `$env:USDA_AMS_API_KEY="your_key"`).
-  Without it, the refresh skips the 90CL/VL pull and the tab shows an empty state.
+  Without it, the refresh skips the USDA AMS pull.
+
+**Imported 90CL (manual):** MLA's API exposes no 90CL series, so the imported 90CL price is
+hand-exported from MLA's market-data portal to `data-manual/Imported 90CL Price - Historical.xlsx`
+and loaded with a one-off command (not part of the scheduled refresh). Re-run after dropping
+a fresh export in place:
+
+    python -m mla_dashboard.external.mla_90cl_manual
+
+It upserts into `lean_beef_prices` (idempotent) and rewrites `data/parquet/lean_beef_prices.parquet`.
 
 ### Running in a restricted network (Claude Code on the web, locked-down CI)
 
@@ -150,7 +162,8 @@ src/mla_dashboard/
   ingest_mla.py  # fetch -> normalise -> upsert per report
   refresh.py     # incremental/backfill orchestrator (entry point)
   analysis.py    # to_currency(), supply_vs_price(), spreads, YoY
-  external/      # fx.py, usda_psd.py, usda_ams.py (90CL/VL), abs.py
+  external/      # fx.py, usda_psd.py, usda_ams.py (US 90CL/VL),
+                 #   mla_90cl_manual.py (imported 90CL xlsx), abs.py
 app.py                              # Streamlit dashboard
 Launch Dashboard.vbs                # no-terminal launcher (Windows)
 Refresh Data.vbs                    # no-terminal incremental refresh

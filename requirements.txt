@@ -4,3 +4,4 @@ pyarrow>=15.0
 plotly>=5.18
 streamlit>=1.32
 tenacity>=8.2
+openpyxl>=3.1

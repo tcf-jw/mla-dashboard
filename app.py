@@ -10,6 +10,7 @@ Run:  streamlit run app.py
 from __future__ import annotations
 
 import hashlib
+import re
 import sys
 from pathlib import Path
 
@@ -362,24 +363,30 @@ with exports_tab:
         download(sub[["result_date", "country", "value"]], "exports.csv")
 
 with lean_tab:
-    st.subheader(f"US lean / trim beef — 90CL & VL grades ({currency})")
+    st.subheader(f"Lean / trim beef — 90CL & VL grades ({currency})")
     lb = table("lean_beef_prices")
     if lb.empty:
         no_data("No 90CL/VL data yet.")
-        st.caption("Set `USDA_AMS_API_KEY` (free key from mymarketnews.ams.usda.gov), then "
-                   "run a refresh to pull USDA AMS lean/trim beef prices — the reference "
-                   "for Australian export grinding beef.")
+        st.caption("Import MLA's indicative imported 90CL series with "
+                   "`python -m mla_dashboard.external.mla_90cl_manual`, and/or set "
+                   "`USDA_AMS_API_KEY` (free key from mymarketnews.ams.usda.gov) and run a "
+                   "refresh to pull USDA AMS US negotiated lean/trim beef prices.")
     else:
         series_opt = sorted(lb["series"].dropna().unique())
         ser = st.selectbox("Report", series_opt)
         sub = lb[lb["series"] == ser]
         sub = analysis.to_currency(sub, currency, "result_date")
+        # Weight basis (c/kg vs /cwt) varies by source. Keep it on the axis but strip the
+        # source currency token — the value is shown in the selected currency, not its native.
+        raw_unit = sub["unit"].dropna().iloc[0] if sub["unit"].notna().any() else ""
+        basis = re.sub(r"^(AUD|AU|USD|US)\s*\$?\s*", "", str(raw_unit)).strip()
+        ylabel = f"Price ({currency} · {basis})" if basis else f"Price ({currency})"
         freq = freq_radio("lean_freq", sub, "result_date", "grade")
-        fig = series_chart(sub, "result_date", "grade", analysis.MEAN,
-                           f"Price ({currency}/cwt)", freq)
+        fig = series_chart(sub, "result_date", "grade", analysis.MEAN, ylabel, freq)
         st.plotly_chart(fig, width="stretch")
         st.caption("Chemical-lean (CL) / visual-lean (VL) grades, e.g. 90CL grinding beef. "
-                   "USDA AMS negotiated sales.")
+                   "MLA imported 90CL is the AU CIF import-parity price (c/kg); USDA AMS "
+                   "series are US negotiated sales (/cwt).")
         download(sub[["result_date", "grade", "value"]], "lean_beef.csv")
 
 with analysis_tab:
