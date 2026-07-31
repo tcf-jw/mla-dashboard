@@ -229,6 +229,12 @@ def _pair(wide: pd.DataFrame, ref: str, col: str, returns: bool) -> tuple[pd.Ser
 def _corr(a: pd.Series, b: pd.Series, method: str) -> float | None:
     if len(a) < 3 or a.nunique() < 2 or b.nunique() < 2:
         return None
+    if method == "spearman":
+        # Spearman is Pearson on ranks. Computed that way on purpose: pandas'
+        # method="spearman" imports scipy.stats, which is not a dependency here and is
+        # absent on the deployment host, so the built-in path raises ModuleNotFoundError.
+        # rank() defaults to average ranks for ties, which is what Spearman specifies.
+        a, b, method = a.rank(), b.rank(), "pearson"
     r = a.corr(b, method=method)
     return None if pd.isna(r) else float(r)
 
