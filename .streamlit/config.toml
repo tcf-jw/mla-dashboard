@@ -1,0 +1,53 @@
+# Design tokens ported from C:\git\claude-template (shadcn "radix-vega" style, neutral
+# base). The template defines its tokens in oklch() in src/index.css; Streamlit's theme
+# parser takes CSS colour strings but not oklch(), so every value below is the hex
+# equivalent. The neutral ramp converts exactly onto Tailwind's neutral scale, which is a
+# useful check that nothing shifted in translation.
+#
+# See docs/design-system-port.md for the full mapping and the remaining phases.
+
+[theme]
+base = "light"
+# Phase 2 replaces this with Inter Variable served from static/.
+font = "sans-serif"
+# Template: --radius: 0.625rem, with sm/md/lg derived from it.
+baseRadius = "0.625rem"
+showSidebarBorder = true
+
+# chartCategoricalColors is deliberately NOT set yet. The template's chart-1..5 are five
+# greys, which cannot carry the seven lamb indicators the Prices tab plots on one axis.
+# That decision is phase 3; see docs/design-system-port.md.
+
+[theme.light]
+primaryColor = "#171717"            # --primary            oklch(0.205 0 0)
+backgroundColor = "#ffffff"         # --background         oklch(1 0 0)
+secondaryBackgroundColor = "#f5f5f5"  # --secondary/--muted oklch(0.97 0 0)
+textColor = "#0a0a0a"               # --foreground         oklch(0.145 0 0)
+linkColor = "#525252"               # neutral-600: distinct from body text without
+                                    # introducing a hue the template does not have
+codeBackgroundColor = "#f5f5f5"     # --muted
+borderColor = "#e5e5e5"             # --border             oklch(0.922 0 0)
+
+[theme.light.sidebar]
+primaryColor = "#171717"            # --sidebar-primary
+backgroundColor = "#fafafa"         # --sidebar            oklch(0.985 0 0)
+secondaryBackgroundColor = "#f5f5f5"  # --sidebar-accent
+textColor = "#0a0a0a"               # --sidebar-foreground
+borderColor = "#e5e5e5"             # --sidebar-border
+
+[theme.dark]
+primaryColor = "#e5e5e5"            # --primary (dark)     oklch(0.922 0 0)
+backgroundColor = "#0a0a0a"         # --background (dark)  oklch(0.145 0 0)
+secondaryBackgroundColor = "#171717"  # --card (dark)       oklch(0.205 0 0)
+textColor = "#fafafa"               # --foreground (dark)  oklch(0.985 0 0)
+linkColor = "#a1a1a1"               # neutral-400
+codeBackgroundColor = "#171717"     # --card
+borderColor = "#262626"             # --border (dark) is white at 10% over #0a0a0a;
+                                    # flattened to a solid value Streamlit accepts
+
+[theme.dark.sidebar]
+primaryColor = "#e5e5e5"
+backgroundColor = "#171717"         # --sidebar (dark)     oklch(0.205 0 0)
+secondaryBackgroundColor = "#0a0a0a"  # --sidebar-accent
+textColor = "#fafafa"
+borderColor = "#262626"

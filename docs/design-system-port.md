@@ -1,6 +1,6 @@
 # Plan: port the claude-template design system to the Streamlit app
 
-Status: proposed, not started. Written 2026-07-31.
+Status: phase 1 done 2026-07-31. Phases 2 to 4 outstanding.
 
 ## What we are porting
 
@@ -87,14 +87,22 @@ before it is settled. Phase 3 cannot.
 
 Each phase is independently shippable and independently revertible.
 
-### Phase 1: tokens (about 45 min)
+### Phase 1: tokens (DONE, took about 30 min)
 
-Create `.streamlit/config.toml` with `[theme]`, `[theme.light]`, `[theme.dark]`,
-`[theme.sidebar]` variants, `baseRadius = "0.625rem"`, and `font = "sans-serif"` as a
-placeholder until phase 2 lands.
+`.streamlit/config.toml` now carries `[theme]`, `[theme.light]`, `[theme.dark]` and both
+sidebar variants, with `baseRadius = "0.625rem"` and `font = "sans-serif"` as a placeholder
+until phase 2. No change to `app.py`. Verified by rendering both modes.
 
-No change to `app.py`. Verify by loading the app and toggling the theme in the app menu:
-both modes should read as the template, and every existing chart should still render.
+Two things learned:
+
+- Once both `[theme.light]` and `[theme.dark]` exist, the app follows the **viewer's**
+  colour-scheme preference. `base` and the `--theme.base` CLI flag no longer force a mode;
+  to test dark, emulate `prefers-color-scheme: dark` in the browser or switch it in the
+  app's Settings menu.
+- Dark mode is now reachable by any viewer, which exposes the hardcoded colours in
+  `app.py` (the range pills at line 46 to 60 keep a light background and an indigo active
+  state, and the change badge stays green). Phase 3 removes them. Until then, dark mode is
+  usable but not yet consistent.
 
 ### Phase 2: Inter Variable (about 30 min)
 
