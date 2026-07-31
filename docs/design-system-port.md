@@ -105,6 +105,12 @@ Two things learned:
   Fixed since, ahead of phase 3: `theme_type()` reads `st.context.theme.type` and the pill
   and ink constants pick their light or dark token from it. Series colours still come from
   `PALETTE`, which phase 3 replaces.
+- Streamlit paints multiselect chips with `primaryColor` and always writes their label in
+  white, so its docs require a *dark* primary. The template's dark `--primary` is the light
+  neutral `#e5e5e5`, which made chip labels white-on-white. Rather than darken the token
+  (it also drives radio dots and focus rings, which need to stay bright on `#0a0a0a`),
+  `CHIP_CSS` in `app.py` restores the template's own pairing: chip keeps `--primary`, label
+  takes `--primary-foreground` (`#171717`). Dark-only; light mode already had contrast.
 
 ### Phase 2: Inter Variable (about 30 min)
 

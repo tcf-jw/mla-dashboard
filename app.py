@@ -25,21 +25,6 @@ from mla_dashboard import analysis, db, leadlag  # noqa: E402
 
 st.set_page_config(page_title="MLA Pricing & Supply", layout="wide", page_icon="🐂")
 
-# Responsive layout: roomy on desktop, edge-to-edge with smaller chrome on phones.
-st.markdown(
-    """<style>
-    .block-container{max-width:1500px;padding-top:1rem;}
-    /* Make the horizontal frequency radio read as a compact pill toolbar. */
-    div[role="radiogroup"]{gap:0.25rem;}
-    @media(max-width:640px){
-        .block-container{padding-left:0.4rem!important;padding-right:0.4rem!important;}
-        h1{font-size:1.5rem!important;}
-        .stTabs [data-baseweb="tab"]{padding:0.35rem 0.5rem;font-size:0.78rem;}
-    }
-    </style>""",
-    unsafe_allow_html=True,
-)
-
 def theme_type() -> str:
     """"light" or "dark" for the current viewer.
 
@@ -66,6 +51,33 @@ PILL_ACTIVE = "#404040" if DARK else "#c7d2fe"    # neutral-700 / indigo-200
 PILL_BORDER = "#404040" if DARK else "#888"
 PILL_FONT = dict(color=INK, size=13)
 PALETTE = px.colors.qualitative.Plotly
+
+# Streamlit paints the multiselect chips with primaryColor and always writes their label in
+# white, which assumes a dark primary. The dark theme's primary is the light neutral
+# #e5e5e5, so the labels came out white-on-white. Restore the template's pairing: the chip
+# keeps --primary, the text takes --primary-foreground. Light mode already reads correctly
+# (dark chip, white label), so the rule is dark-only.
+CHIP_CSS = """
+    .stMultiSelect [data-baseweb="tag"],
+    .stMultiSelect [data-baseweb="tag"] span,
+    .stMultiSelect [data-baseweb="tag"] svg{color:#171717!important;fill:#171717!important;}
+""" if DARK else ""
+
+# Responsive layout: roomy on desktop, edge-to-edge with smaller chrome on phones.
+st.markdown(
+    f"""<style>
+    .block-container{{max-width:1500px;padding-top:1rem;}}
+    /* Make the horizontal frequency radio read as a compact pill toolbar. */
+    div[role="radiogroup"]{{gap:0.25rem;}}
+    {CHIP_CSS}
+    @media(max-width:640px){{
+        .block-container{{padding-left:0.4rem!important;padding-right:0.4rem!important;}}
+        h1{{font-size:1.5rem!important;}}
+        .stTabs [data-baseweb="tab"]{{padding:0.35rem 0.5rem;font-size:0.78rem;}}
+    }}
+    </style>""",
+    unsafe_allow_html=True,
+)
 
 # Trimmed to five ranges so the row never overflows a phone; daily detail is still
 # reachable by pinch-zoom. Frequency (Daily/Weekly/…) is a native control above the chart.
