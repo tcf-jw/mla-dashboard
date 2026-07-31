@@ -42,7 +42,14 @@ Tabs:
   automatically, the default 90CL source), MLA's indicative **imported 90CL** (AU CIF
   import-parity, AUD c/kg, manual import, see below), and USDA AMS **US negotiated** sales
   (USD/cwt). All three are normalised to a **per-kg** basis so grades compare directly.
-- **Analysis** — AU–global spread + correlation.
+- **Analysis**: AU vs global spread + correlation.
+- **Lead/Lag**: pattern-finding across every stored series. Pick a reference, add any
+  number of comparison series (indicators, 90CL grades, global prices, FX, CPI categories,
+  exports, slaughter, yardings, ABS), give each its own lag in periods, and read the
+  correlations. **Suggest best lags** scans the lag range and picks the peak for each
+  series. Below the overlay: a cross-correlation bar chart per lag, a rolling-correlation
+  line, and a table of Pearson and Spearman on both levels and percentage change.
+  Series that only share a trend are flagged rather than left to look convincing.
 
 Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
 freshness** (latest date held).
@@ -168,7 +175,8 @@ src/mla_dashboard/
   db.py          # SQLite + Parquet (read falls back to Parquet)
   ingest_mla.py  # fetch -> normalise -> upsert per report
   refresh.py     # incremental/backfill orchestrator (entry point)
-  analysis.py    # to_currency(), supply_vs_price(), spreads, YoY
+  analysis.py    # to_currency(), to_per_kg(), supply_vs_price(), spreads, YoY
+  leadlag.py     # series catalogue, shared-calendar alignment, lags, correlations
   external/      # fx.py, usda_psd.py, usda_ams.py (US 90CL/VL),
                  #   mla_us_imported.py (report 9: Steiner 90CL/trim),
                  #   mla_90cl_manual.py (imported 90CL xlsx),

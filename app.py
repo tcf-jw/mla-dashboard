@@ -21,7 +21,7 @@ from plotly.subplots import make_subplots
 
 sys.path.insert(0, str(Path(__file__).parent / "src"))
 
-from mla_dashboard import analysis, db  # noqa: E402
+from mla_dashboard import analysis, db, leadlag  # noqa: E402
 
 st.set_page_config(page_title="MLA Pricing & Supply", layout="wide", page_icon="🐂")
 
@@ -238,8 +238,10 @@ def default_indicator(ids: list[int]) -> int:
     return ids[0]
 
 
-prices_tab, supply_tab, svp_tab, global_tab, exports_tab, lean_tab, analysis_tab = st.tabs(
-    ["Prices", "Supply", "Supply/Price", "Global", "Exports", "90CL/VL", "Analysis"]
+(prices_tab, supply_tab, svp_tab, global_tab, exports_tab, lean_tab, analysis_tab,
+ leadlag_tab) = st.tabs(
+    ["Prices", "Supply", "Supply/Price", "Global", "Exports", "90CL/VL", "Analysis",
+     "Lead/Lag"]
 )
 
 with prices_tab:
@@ -412,3 +414,172 @@ with analysis_tab:
             st.metric("AU–global price correlation", f"{corr:.2f}")
             st.caption(f"Monthly aggregation · Pearson r over {len(spread)} months.")
             download(spread, "au_vs_global.csv")
+
+
+# --- Lead/Lag ---------------------------------------------------------------------------
+@st.cache_data(ttl=600)
+def _catalogue() -> list[dict]:
+    return leadlag.catalogue()
+
+
+@st.cache_data(ttl=600)
+def _matrix(keys: tuple[str, ...], freq: str, cur: str) -> pd.DataFrame:
+    """Resampled wide frame for the chosen keys.
+
+    Cached on the keys rather than the specs: the spec dicts are unhashable, and the keys
+    identify them uniquely anyway.
+    """
+    by_key = {c["key"]: c for c in _catalogue()}
+    return leadlag.matrix([by_key[k] for k in keys if k in by_key], freq, cur)
+
+
+def _lag_key(key: str) -> str:
+    return f"lag_{key}"
+
+
+with leadlag_tab:
+    st.subheader("Lead/lag & correlation")
+    cat = _catalogue()
+    if not cat:
+        no_data("No series available.")
+    else:
+        label_of = {c["key"]: f"{c['group']} · {c['label']}" for c in cat}
+        keys = list(label_of)
+
+        def _find(fragment: str, fallback: str) -> str:
+            hit = next((k for k in keys if fragment.lower() in label_of[k].lower()), None)
+            return hit or fallback
+
+        c1, c2 = st.columns([1, 2])
+        with c1:
+            ref = st.selectbox(
+                "Reference series", keys,
+                index=keys.index(_find("Eastern Young Cattle", keys[0])),
+                format_func=lambda k: label_of[k], key="ll_ref",
+                help="Every other series is measured against this one.",
+            )
+        with c2:
+            default_cmp = [k for k in (_find("90CL Boneless Beef, NZ/Australia", ""),
+                                       _find("AUD/USD", "")) if k and k != ref]
+            compare = st.multiselect(
+                "Compare against", [k for k in keys if k != ref], default=default_cmp,
+                format_func=lambda k: label_of[k], key="ll_cmp",
+            )
+
+        c3, c4, c5 = st.columns(3)
+        freq = c3.radio(
+            "Frequency", list(leadlag.FREQ_RULES), index=1, horizontal=True, key="ll_freq",
+            help="Series are resampled onto this calendar before aligning: prices "
+                 "averaged, volumes summed.",
+        )
+        max_lag = c4.number_input("Max lag to scan (periods)", 1, 104, 12, key="ll_maxlag")
+        scale = c5.radio("Overlay scale", ["Index = 100", "Z-score"], horizontal=True,
+                         key="ll_scale")
+
+        if not compare:
+            st.info("Pick at least one series to compare against the reference.")
+        else:
+            wide = _matrix(tuple([ref] + compare), freq, currency)
+            if wide.empty or ref not in wide.columns:
+                st.info("No overlapping data for that combination.")
+            else:
+                # Applied here, before the lag widgets exist: Streamlit refuses to write a
+                # widget's session state once that widget has been instantiated this run,
+                # so the button below only raises a flag and reruns.
+                if st.session_state.pop("ll_apply_best", False):
+                    for k, v in leadlag.best_lags(wide, ref, int(max_lag)).items():
+                        st.session_state[_lag_key(k)] = int(v)
+
+                st.markdown("**Lag per series** (periods; positive = leads the reference)")
+                lag_cols = st.columns(min(len(compare), 4))
+                lags = {}
+                for i, k in enumerate(compare):
+                    if k not in wide.columns:
+                        continue
+                    # Explicit 0 default: without it the widget starts at its minimum,
+                    # silently lagging every series by the full scan range.
+                    lags[k] = lag_cols[i % len(lag_cols)].number_input(
+                        label_of[k], -int(max_lag), int(max_lag), 0, key=_lag_key(k),
+                    )
+
+                if st.button("Suggest best lags", key="ll_suggest",
+                             help="Scans every lag in range and picks the one maximising "
+                                  "|r| on percentage change."):
+                    st.session_state["ll_apply_best"] = True
+                    st.rerun()
+
+                lagged = leadlag.apply_lags(wide, lags)
+
+                plot = leadlag.rebase(lagged, "zscore" if scale == "Z-score" else "index")
+                fig = go.Figure()
+                for k in plot.columns:
+                    s = plot[k].dropna()
+                    # The reference takes the neutral ink colour from the design tokens so
+                    # it always reads as the anchor, whatever the compared series get.
+                    is_ref = k == ref
+                    fig.add_trace(go.Scatter(
+                        x=s.index, y=s.values, name=label_of.get(k, k), mode="lines",
+                        line=dict(color="#171717" if is_ref else color_for(k),
+                                  width=3 if is_ref else 2),
+                    ))
+                unit = "Z-score" if scale == "Z-score" else "Index (first period = 100)"
+                fig.update_layout(yaxis_title=unit)
+                st.plotly_chart(_style(fig), width="stretch")
+                st.caption(
+                    f"{freq} aggregation, lags applied, reference drawn thicker. Series are "
+                    "rescaled to share one axis, so read shape, not level."
+                )
+
+                mt = leadlag.metrics(lagged, ref)
+                if mt.empty:
+                    st.info("Not enough overlapping observations to correlate.")
+                else:
+                    show = mt.assign(series=mt["series"].map(lambda k: label_of.get(k, k)))
+                    show = show.rename(columns={
+                        "n": "Obs", "pearson_levels": "Pearson (levels)",
+                        "spearman_levels": "Spearman (levels)",
+                        "pearson_returns": "Pearson (% change)",
+                        "spearman_returns": "Spearman (% change)",
+                        "trend_driven": "Trend-driven?",
+                    })
+                    st.dataframe(show.set_index("series"), width="stretch")
+                    if mt["trend_driven"].any():
+                        st.warning(
+                            "Flagged rows correlate far better on levels than on percentage "
+                            "change. That is two series sharing a trend, not one moving with "
+                            "the other. Trust the percentage-change column."
+                        )
+                    download(mt, "leadlag_metrics.csv")
+
+                st.divider()
+                focus = st.selectbox("Detail for", compare,
+                                     format_func=lambda k: label_of[k], key="ll_focus")
+                d1, d2 = st.columns(2)
+                with d1:
+                    cc = leadlag.cross_correlation(wide, ref, focus, int(max_lag))
+                    ccf = go.Figure(go.Bar(x=cc["lag"], y=cc["r"],
+                                           marker_color=color_for(focus)))
+                    ccf.update_layout(height=320, xaxis_title="Lag (periods, + = leads)",
+                                      yaxis_title="Pearson r (% change)",
+                                      margin=dict(t=30, b=40, l=10, r=10))
+                    st.plotly_chart(ccf, width="stretch")
+                    peak = cc.dropna(subset=["r"])
+                    if not peak.empty:
+                        row = peak.loc[peak["r"].abs().idxmax()]
+                        st.caption(f"Strongest at lag {int(row['lag'])}: r = {row['r']:.3f} "
+                                   f"over {int(row['n'])} periods.")
+                with d2:
+                    win = st.slider("Rolling window (periods)", 6, 60, 24, key="ll_win")
+                    roll = leadlag.rolling_correlation(lagged, ref, focus, int(win))
+                    if roll.empty:
+                        st.info("Not enough history for that window.")
+                    else:
+                        rf = go.Figure(go.Scatter(x=roll["date"], y=roll["r"], mode="lines",
+                                                  line=dict(color=color_for(focus))))
+                        rf.update_layout(height=320, yaxis_title="Rolling r (% change)",
+                                         margin=dict(t=30, b=40, l=10, r=10))
+                        rf.update_yaxes(range=[-1, 1])
+                        st.plotly_chart(rf, width="stretch")
+                        st.caption("A relationship that decays shows here as a drift toward 0.")
+
+                download(lagged.reset_index(names="date"), "leadlag_series.csv")
