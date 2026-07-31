@@ -18,12 +18,15 @@ Ran `python probe_mla_reports.py` to look for 90CL / lean / manufacturing beef i
 | 9      | 148 rows — "Steer Flats", US c/lb | No (steer price) |
 | 11–20  | 403 Forbidden (no access) | — |
 
-**Conclusion: no MLA report holds 90CL/lean/manufacturing beef.** Reports 8/9 are live but are
-cattle/steer price indices, not lean beef. Nothing flagged interesting by the probe.
+**CORRECTED 2026-07-31: that conclusion was wrong.** The probe only read page 1 of
+`/report/9` and saw "Steer Flats". Report 9 ("US Imported Meat Prices", Steiner, weekly)
+returns ~12 imported lean/trim grades including **90CL Boneless Beef, NZ/Australia** in
+US c/lb, with history from 2000-01-06. It needs no API key.
 
-=> **Step 3 (add report to `config.py REPORTS`) is SKIPPED** — no qualifying report exists.
-90CL/lean beef must keep coming from the external USDA AMS source (`external/usda_ams.py`),
-not MLA.
+=> 90CL is now pulled automatically by `external/mla_us_imported.py`, wired into
+`refresh.py`. USDA AMS (`external/usda_ams.py`) stays as an optional extra source, and the
+manual xlsx stays as a cross-check; neither is required for the headline 90CL series any
+more.
 
 ## Step 2 — Backfill (PARTIAL — RESUME HERE)
 Run env: package not installed, so **must** set `PYTHONPATH=src`:
@@ -59,7 +62,9 @@ backfill until these are resolved; it only re-pulls MLA reports (already done) +
 | usda_psd | ⛔ skipped | **`USDA_PSD_API_KEY` not set.** Free key at api.data.gov, set env var. |
 | herd_flock | ❌ 0 rows | report 2 (`/report/2?year=Y`) returns 0 rows for 2023/24/25 — endpoint/param drift, needs debugging in `ingest_mla.ingest_herd` / API shape. |
 | worldbank 85VL | ❌ no data | `worldbank.ingest` returns nothing even from 2010 — endpoint likely changed, needs debugging. |
-| abs | ⛔ 403 | `https://data.api.abs.gov.au/data/LIVESTOCK_MEAT/...` returns 403 Forbidden — auth/endpoint change. |
+| abs | ✅ FIXED 2026-07-31 | Two faults: the API is served under `/rest/` (bare `/data/` 403s) and the dataflow id `LIVESTOCK_MEAT` does not exist. Real ids are `LSTOCK_SLAUGHT` + `LSTOCK_MEAT`; both now pulled (47,195 rows, 1990 to 2026-Q1, incl. pigs and chickens). |
+| abs_cpi | ✅ NEW 2026-07-31 | ABS `CPI` dataflow, keyless: 33,210 rows, 150 categories, 1990 to 2026-06. Headline CPI plus Beef and veal / Lamb and goat / Pork / Poultry retail indices. |
+| mla_us_imported **90CL** | ✅ NEW 2026-07-31 | MLA `/report/9` (Steiner), keyless: 9,782 rows. Removes the USDA AMS key from the critical path. |
 
 No `.env` file exists and no USDA/ABS keys are in the environment (checked 2026-06-18).
 Smoke-test calls mutated DB/parquet (fx top-up) but were **reverted** (`git restore data/`) —

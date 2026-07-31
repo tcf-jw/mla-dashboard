@@ -36,10 +36,12 @@ Tabs:
   `category`, so both sides filter to the same species; shows their correlation.
 - **Global** — AU vs world cattle prices.
 - **Exports** — top destination markets (selectable N).
-- **90CL/VL** — lean / trim beef prices by chemical-lean grade (90CL, 85CL, 50CL …), the
-  reference for Australian export grinding beef. Two sources, pick via the **Report**
-  selector: MLA's indicative **imported 90CL** (AU CIF import-parity, AUD c/kg — manual
-  import, see below) and USDA AMS **US negotiated** sales (USD/cwt).
+- **90CL/VL**: lean / trim beef prices by chemical-lean grade (90CL, 85CL, 50CL …), the
+  reference for Australian export grinding beef. Three sources, pick via the **Report**
+  selector: **US imported (Steiner, weekly)** from MLA report 9 (US c/lb, refreshed
+  automatically, the default 90CL source), MLA's indicative **imported 90CL** (AU CIF
+  import-parity, AUD c/kg, manual import, see below), and USDA AMS **US negotiated** sales
+  (USD/cwt). All three are normalised to a **per-kg** basis so grades compare directly.
 - **Analysis** — AU–global spread + correlation.
 
 Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
@@ -86,8 +88,10 @@ cloud auto-redeploys.
 | Frankfurter (`api.frankfurter.dev`) | Daily AUD/USD FX for currency conversion | None |
 | USDA PSD Online | Global cattle/beef supply by country | free `api.data.gov` key |
 | USDA AMS Market News (`marsapi.ams.usda.gov`) | **90CL / VL lean & trim beef prices** (US negotiated, grinding-beef reference) | free MARS API key |
-| MLA portal export (`data-manual/*.xlsx`) | **Imported 90CL price** (AU CIF import-parity, AUD c/kg, weekly) — MLA's API has no 90CL report | None (manual download) |
-| ABS Data API | Official AU slaughter & meat production | None |
+| MLA Statistics API `/report/9` (Steiner) | **US imported lean/trim prices** incl. **90CL Boneless Beef, NZ/Australia** (US c/lb, weekly, from 2000) | None |
+| MLA portal export (`data-manual/*.xlsx`) | **Imported 90CL price** (AU CIF import-parity, AUD c/kg, weekly), kept as a cross-check on report 9 | None (manual download) |
+| ABS Data API (`LSTOCK_SLAUGHT`, `LSTOCK_MEAT`) | Official AU slaughter (head) & meat production (tonnes), incl. **pigs and chickens** | None |
+| ABS Data API (`CPI`) | **Consumer Price Index**: All groups plus the full category tree (Food, Meat and seafoods, Beef and veal, Lamb and goat, Pork, Poultry …) | None |
 
 Set the optional keys before refreshing:
 - Global supply: `export USDA_PSD_API_KEY=your_key` (PowerShell: `$env:USDA_PSD_API_KEY="your_key"`).
@@ -95,10 +99,13 @@ Set the optional keys before refreshing:
   `export USDA_AMS_API_KEY=your_key` (PowerShell: `$env:USDA_AMS_API_KEY="your_key"`).
   Without it, the refresh skips the USDA AMS pull.
 
-**Imported 90CL (manual):** MLA's API exposes no 90CL series, so the imported 90CL price is
-hand-exported from MLA's market-data portal to `data-manual/Imported 90CL Price - Historical.xlsx`
-and loaded with a one-off command (not part of the scheduled refresh). Re-run after dropping
-a fresh export in place:
+**Imported 90CL (manual):** MLA report 9 now supplies 90CL automatically, so this manual
+export is no longer the only route. It is kept as an independent cross-check: MLA's own
+published AUD import-parity number, hand-exported from the market-data portal to
+`data-manual/Imported 90CL Price - Historical.xlsx` and loaded with a one-off command (not
+part of the scheduled refresh). Report 9 converted to AUD c/kg tracks it to a mean 0.375%
+over 830 shared weeks, the residual being MLA's RBA rates vs the ECB rates behind
+`fx_rates`. Re-run after dropping a fresh export in place:
 
     python -m mla_dashboard.external.mla_90cl_manual
 
@@ -163,7 +170,9 @@ src/mla_dashboard/
   refresh.py     # incremental/backfill orchestrator (entry point)
   analysis.py    # to_currency(), supply_vs_price(), spreads, YoY
   external/      # fx.py, usda_psd.py, usda_ams.py (US 90CL/VL),
-                 #   mla_90cl_manual.py (imported 90CL xlsx), abs.py
+                 #   mla_us_imported.py (report 9: Steiner 90CL/trim),
+                 #   mla_90cl_manual.py (imported 90CL xlsx),
+                 #   abs.py (slaughter/meat production), abs_cpi.py (CPI)
 app.py                              # Streamlit dashboard
 Launch Dashboard.vbs                # no-terminal launcher (Windows)
 Refresh Data.vbs                    # no-terminal incremental refresh
@@ -177,6 +186,10 @@ data/parquet/  # committed snapshots the dashboard reads (mla.db is git-ignored)
 
 - `/report/7` global prices are fetched per Steiner country code (USA confirmed; other
   codes probed and skipped if empty).
-- ABS dataflow id (`LIVESTOCK_MEAT`) may need updating if ABS re-versions it; the step
-  skips gracefully on failure.
+- ABS dataflow ids (`LSTOCK_SLAUGHT`, `LSTOCK_MEAT`, `CPI`) may need updating if ABS
+  re-versions them; each step skips gracefully on failure. The API is served under
+  `/rest/`; the bare `/data/` path returns 403.
+- `/report/9` 504s on multi-year windows and 500s when `toDate` passes the latest
+  published week, so it is pulled a year at a time with the same last-good-date retry the
+  registry reports use.
 - History depth per report is not formally documented — discovered during backfill.
