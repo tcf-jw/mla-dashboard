@@ -53,15 +53,27 @@ def upsert(table: str, df: pd.DataFrame, pk: list[str]) -> int:
     return len(df)
 
 
-def max_date(table: str, date_col: str) -> str | None:
-    """Latest date stored for a table, or None if table is empty/missing."""
+def max_date(
+    table: str, date_col: str, where_col: str | None = None, where_val: str | None = None
+) -> str | None:
+    """Latest date stored for a table, or None if table is empty/missing.
+
+    ``where_col``/``where_val`` narrow the scan to one slice - needed where several
+    sources share a table (e.g. ``lean_beef_prices``) and each must top up from its own
+    latest date rather than the table-wide maximum.
+    """
     with connect() as conn:
         row = conn.execute(
             "SELECT name FROM sqlite_master WHERE type='table' AND name=?", (table,)
         ).fetchone()
         if not row:
             return None
-        result = conn.execute(f'SELECT MAX("{date_col}") FROM "{table}"').fetchone()
+        sql = f'SELECT MAX("{date_col}") FROM "{table}"'
+        params: tuple = ()
+        if where_col is not None:
+            sql += f' WHERE "{where_col}" = ?'
+            params = (where_val,)
+        result = conn.execute(sql, params).fetchone()
     return result[0] if result and result[0] else None
 
 

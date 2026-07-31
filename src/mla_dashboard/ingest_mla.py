@@ -15,7 +15,7 @@ from . import config, db
 from .client import MLAClient, MLAApiError
 
 
-def _year_chunks(from_date: str, to_date: str):
+def year_chunks(from_date: str, to_date: str):
     """Yield [start, end] ISO date pairs, one per calendar year.
 
     Chunking by year keeps each request modest and bounds the blast radius of a failed
@@ -73,7 +73,7 @@ def ingest_report(client: MLAClient, key: str, from_date: str, to_date: str) -> 
         fan_params = [{}]
 
     for fp in fan_params:
-        for cf, ct in _year_chunks(from_date, to_date):
+        for cf, ct in year_chunks(from_date, to_date):
             try:
                 rows = client.get_all(spec["report"], {**fp, "fromDate": cf, "toDate": ct})
             except MLAApiError as e:
