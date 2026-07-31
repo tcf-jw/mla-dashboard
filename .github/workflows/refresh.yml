@@ -58,7 +58,7 @@ jobs:
             DATES=$(python3 -c "
           import sys; sys.path.insert(0,'src')
           from mla_dashboard import db
-          pairs = [('indicators','calendar_date'),('exports','result_date'),('lean_beef_prices','result_date')]
+          pairs = [('indicators','calendar_date'),('exports','result_date'),('lean_beef_prices','result_date'),('cpi','period_end')]
           parts = []
           for t,c in pairs:
               d = db.max_date(t,c)
