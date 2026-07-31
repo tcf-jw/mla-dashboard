@@ -7,6 +7,8 @@ All price values are stored in their native currency (see the ``currency`` colum
 
 from __future__ import annotations
 
+import re
+
 import pandas as pd
 
 from . import db
@@ -186,6 +188,32 @@ def to_currency(
 
     out[value_col] = out.apply(convert, axis=1)
     return out.drop(columns=["date", "aud_usd"], errors="ignore")
+
+
+# Weight-basis conversions to a per-kg price. Sources quote lean/trim beef on different
+# bases (MLA c/kg, Steiner c/lb, USDA AMS $/cwt where cwt = 100 lb), which are not
+# comparable until normalised.
+PER_KG_FACTORS = {"lb": 2.2046226218, "cwt": 0.022046226218, "kg": 1.0}
+
+
+def to_per_kg(df: pd.DataFrame, value_col: str = "value") -> tuple[pd.DataFrame, str]:
+    """Normalise a lean-beef frame to a per-kg basis.
+
+    Returns the frame plus the basis label to show on the axis. Rows whose ``unit`` names
+    no recognised weight basis pass through unconverted and the original unit is reported,
+    so an unexpected source is never silently rescaled.
+    """
+    if df.empty or "unit" not in df.columns:
+        return df, ""
+    units = df["unit"].dropna()
+    raw = str(units.iloc[0]) if not units.empty else ""
+    basis = next((b for b in PER_KG_FACTORS if re.search(rf"/\s*{b}\b", raw, re.IGNORECASE)), None)
+    if basis is None:
+        return df, re.sub(r"^(AUD|AU|USD|US)\s*\$?\s*", "", raw).strip()
+    out = df.copy()
+    out[value_col] = out[value_col] * PER_KG_FACTORS[basis]
+    # $/cwt carries dollars; every other basis here is cents.
+    return out, "c/kg" if basis != "cwt" else "$/kg"
 
 
 def indicator_series(indicator_id: int, currency: str = "AUD") -> pd.DataFrame:

@@ -10,7 +10,6 @@ Run:  streamlit run app.py
 from __future__ import annotations
 
 import hashlib
-import re
 import sys
 from pathlib import Path
 
@@ -376,17 +375,18 @@ with lean_tab:
         ser = st.selectbox("Report", series_opt)
         sub = lb[lb["series"] == ser]
         sub = analysis.to_currency(sub, currency, "result_date")
-        # Weight basis (c/kg vs /cwt) varies by source. Keep it on the axis but strip the
-        # source currency token — the value is shown in the selected currency, not its native.
-        raw_unit = sub["unit"].dropna().iloc[0] if sub["unit"].notna().any() else ""
-        basis = re.sub(r"^(AUD|AU|USD|US)\s*\$?\s*", "", str(raw_unit)).strip()
+        # Weight basis varies by source (MLA c/kg, Steiner c/lb, AMS $/cwt), so normalise
+        # to per-kg: otherwise the same 90CL price reads three different ways.
+        sub, basis = analysis.to_per_kg(sub)
         ylabel = f"Price ({currency} · {basis})" if basis else f"Price ({currency})"
         freq = freq_radio("lean_freq", sub, "result_date", "grade")
         fig = series_chart(sub, "result_date", "grade", analysis.MEAN, ylabel, freq)
         st.plotly_chart(fig, width="stretch")
         st.caption("Chemical-lean (CL) / visual-lean (VL) grades, e.g. 90CL grinding beef. "
-                   "MLA imported 90CL is the AU CIF import-parity price (c/kg); USDA AMS "
-                   "series are US negotiated sales (/cwt).")
+                   "MLA imported 90CL is the AU CIF import-parity price (c/kg, manual "
+                   "export); US imported (Steiner) is MLA report 9, quoted US c/lb and "
+                   "refreshed daily; USDA AMS series are US negotiated sales ($/cwt). "
+                   "All are normalised to a per-kg basis for comparison.")
         download(sub[["result_date", "grade", "value"]], "lean_beef.csv")
 
 with analysis_tab:
