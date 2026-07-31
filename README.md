@@ -28,7 +28,14 @@ python -m mla_dashboard.refresh              # later: incremental top-up
 
 ## Using the dashboard
 
-Tabs:
+Tabs (**Lead/Lag** opens first: it is the question the other tabs feed):
+- **Lead/Lag**: pattern-finding across every stored series. Pick a reference, add any
+  number of comparison series (indicators, 90CL grades, global prices, FX, CPI categories,
+  exports, slaughter, yardings, ABS), give each its own lag in periods, and read the
+  correlations. **Suggest best lags** scans the lag range and picks the peak for each
+  series. Below the overlay: a cross-correlation bar chart per lag, a rolling-correlation
+  line, and a table of Pearson and Spearman on both levels and percentage change.
+  Series that only share a trend are flagged rather than left to look convincing.
 - **Prices** — AU indicators (EYCI etc.), with latest-value + 1-month change KPIs.
 - **Supply** — slaughter/production by category, location, measure.
 - **Supply/Price** — dual-axis price vs slaughter/production volume, **filtered by
@@ -43,13 +50,6 @@ Tabs:
   import-parity, AUD c/kg, manual import, see below), and USDA AMS **US negotiated** sales
   (USD/cwt). All three are normalised to a **per-kg** basis so grades compare directly.
 - **Analysis**: AU vs global spread + correlation.
-- **Lead/Lag**: pattern-finding across every stored series. Pick a reference, add any
-  number of comparison series (indicators, 90CL grades, global prices, FX, CPI categories,
-  exports, slaughter, yardings, ABS), give each its own lag in periods, and read the
-  correlations. **Suggest best lags** scans the lag range and picks the peak for each
-  series. Below the overlay: a cross-correlation bar chart per lag, a rolling-correlation
-  line, and a table of Pearson and Spearman on both levels and percentage change.
-  Series that only share a trend are flagged rather than left to look convincing.
 
 Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
 freshness** (latest date held).

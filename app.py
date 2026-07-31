@@ -40,10 +40,31 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+def theme_type() -> str:
+    """"light" or "dark" for the current viewer.
+
+    Both `[theme.light]` and `[theme.dark]` exist in `.streamlit/config.toml`, so the mode
+    follows the viewer's colour-scheme preference and the Settings menu. `st.context.theme`
+    is how that choice reaches Python; it can be None before the frontend reports, and is
+    absent on older Streamlit, so both cases fall back to light.
+    """
+    try:
+        return getattr(st.context.theme, "type", None) or "light"
+    except Exception:
+        return "light"
+
+
+DARK = theme_type() == "dark"
+
+# Chart chrome mirrors the design tokens in `.streamlit/config.toml`. Plotly draws these
+# itself, so anything hardcoded here would keep its light value in dark mode.
+INK = "#fafafa" if DARK else "#171717"       # --foreground: the neutral anchor colour
+
 # Shared pill styling for the on-chart range selector.
-PILL_BG = "#f0f2f6"
-PILL_BORDER = "#888"
-PILL_FONT = dict(color="#111", size=13)
+PILL_BG = "#171717" if DARK else "#f0f2f6"        # --card (dark) / light surface
+PILL_ACTIVE = "#404040" if DARK else "#c7d2fe"    # neutral-700 / indigo-200
+PILL_BORDER = "#404040" if DARK else "#888"
+PILL_FONT = dict(color=INK, size=13)
 PALETTE = px.colors.qualitative.Plotly
 
 # Trimmed to five ranges so the row never overflows a phone; daily detail is still
@@ -56,7 +77,7 @@ RANGE_BUTTONS = dict(
         dict(count=1, label="1Y", step="year", stepmode="backward"),
         dict(step="all", label="ALL"),
     ],
-    bgcolor=PILL_BG, activecolor="#c7d2fe", bordercolor=PILL_BORDER,
+    bgcolor=PILL_BG, activecolor=PILL_ACTIVE, bordercolor=PILL_BORDER,
     borderwidth=1, font=PILL_FONT, x=0, y=1.0, xanchor="left", yanchor="bottom",
 )
 
@@ -238,10 +259,12 @@ def default_indicator(ids: list[int]) -> int:
     return ids[0]
 
 
-(prices_tab, supply_tab, svp_tab, global_tab, exports_tab, lean_tab, analysis_tab,
- leadlag_tab) = st.tabs(
-    ["Prices", "Supply", "Supply/Price", "Global", "Exports", "90CL/VL", "Analysis",
-     "Lead/Lag"]
+# Lead/Lag leads: it is the question the dashboard exists to answer, and Streamlit opens on
+# whichever tab is listed first. The rest keep their previous order behind it.
+(leadlag_tab, prices_tab, supply_tab, svp_tab, global_tab, exports_tab, lean_tab,
+ analysis_tab) = st.tabs(
+    ["Lead/Lag", "Prices", "Supply", "Supply/Price", "Global", "Exports", "90CL/VL",
+     "Analysis"]
 )
 
 with prices_tab:
@@ -515,11 +538,12 @@ with leadlag_tab:
                 for k in plot.columns:
                     s = plot[k].dropna()
                     # The reference takes the neutral ink colour from the design tokens so
-                    # it always reads as the anchor, whatever the compared series get.
+                    # it always reads as the anchor, whatever the compared series get. INK
+                    # flips with the theme; a fixed near-black line vanished in dark mode.
                     is_ref = k == ref
                     fig.add_trace(go.Scatter(
                         x=s.index, y=s.values, name=label_of.get(k, k), mode="lines",
-                        line=dict(color="#171717" if is_ref else color_for(k),
+                        line=dict(color=INK if is_ref else color_for(k),
                                   width=3 if is_ref else 2),
                     ))
                 unit = "Z-score" if scale == "Z-score" else "Index (first period = 100)"

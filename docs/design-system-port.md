@@ -99,10 +99,12 @@ Two things learned:
   colour-scheme preference. `base` and the `--theme.base` CLI flag no longer force a mode;
   to test dark, emulate `prefers-color-scheme: dark` in the browser or switch it in the
   app's Settings menu.
-- Dark mode is now reachable by any viewer, which exposes the hardcoded colours in
-  `app.py` (the range pills at line 46 to 60 keep a light background and an indigo active
-  state, and the change badge stays green). Phase 3 removes them. Until then, dark mode is
-  usable but not yet consistent.
+- Dark mode is now reachable by any viewer, which exposed the hardcoded colours in
+  `app.py`: the range pills kept a light background with an indigo active state, and the
+  Lead/Lag reference line was a fixed near-black that vanished on the dark background.
+  Fixed since, ahead of phase 3: `theme_type()` reads `st.context.theme.type` and the pill
+  and ink constants pick their light or dark token from it. Series colours still come from
+  `PALETTE`, which phase 3 replaces.
 
 ### Phase 2: Inter Variable (about 30 min)
 
@@ -115,13 +117,14 @@ Verify: headings and body render in Inter, not the default sans stack.
 
 ### Phase 3: charts (about 1.5 h, blocked on the palette decision)
 
-`app.py` currently hardcodes its own colours: `PALETTE = px.colors.qualitative.Plotly`,
-`PILL_BG` / `PILL_BORDER` / `PILL_FONT`, and a `color_for()` helper wired into five chart
-builders (lines 46 to 70, then 130, 322, 325, 407). Explicit per-trace colours override
-the theme, so the theme palette does nothing until these are removed.
+`app.py` still hardcodes its series colours: `PALETTE = px.colors.qualitative.Plotly` and a
+`color_for()` helper wired into five chart builders. Explicit per-trace colours override
+the theme, so the theme palette does nothing until these are removed. The pill and ink
+constants are already token-driven and flip with `theme_type()`, so what remains here is
+the palette decision.
 
-1. Delete `PALETTE` and the hardcoded pill colours; let `chartCategoricalColors` drive
-   series colour.
+1. Delete `PALETTE`; let `chartCategoricalColors` drive series colour. The pill constants
+   are done.
 2. Keep `color_for()` only where colour carries fixed meaning (price versus volume on the
    dual-axis Supply/Price chart), and point it at named tokens rather than palette indices.
 3. Move gridline, axis and font styling onto the token values so charts match the app
