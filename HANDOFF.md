@@ -84,8 +84,13 @@ working tree is clean at the last commit.
 6. Commit `data/parquet/` + push to main. Report per-source row counts + any `skip ...` lines.
 
 ## Gotchas
-- `data/mla.db` (~16 MB) is git-tracked but we commit **only `data/parquet/`** per the task.
-  Leave mla.db unstaged.
+- `data/mla.db` is **git-ignored** (`.gitignore`: `*.db`), local-only, regenerable from
+  refresh. Only `data/parquet/` is committed. CORRECTED 2026-08-03: an earlier version of
+  this line said the db was tracked-but-unstaged; it is ignored outright.
+- **A local `mla.db` shadows fresher parquet.** `db.read_table()` reads SQLite whenever the
+  file exists and only falls back to parquet if it is missing, with no date comparison. So
+  after CI commits fresh parquet, a local checkout still serves the older db until you run
+  `refresh`. Both launchers now refresh before starting Streamlit to avoid this.
 - A Streamlit dashboard process may be running separately — don't kill it.
 - `ps -W` PID column ≠ Windows PID; use the WINPID (4th col) for taskkill, or `TaskStop`.
 - Tonight's snapshot is PARTIAL — main has indicators/yardings refreshed but NOT herd or any

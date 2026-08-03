@@ -13,7 +13,14 @@ interactive Streamlit dashboard with an **AUD/USD** toggle.
 1. Double-click **`Refresh Data (Full Backfill).bat`** once — pulls all history (a few minutes).
 2. Double-click **`Launch Dashboard.vbs`** — starts hidden (no console) and opens your browser.
 
-Keep it updated later: double-click **`Refresh Data.vbs`** (quick incremental pull, popup when done).
+**Launching refreshes first.** `Launch Dashboard.vbs` runs an incremental pull before
+starting Streamlit, so a restart always serves current data. That adds a short delay to
+startup. If the pull fails (offline, API down) you get a warning popup and the dashboard
+still launches on whatever is already stored.
+
+Need a top-up *without* restarting: double-click **`Refresh Data.vbs`** (quick incremental
+pull, popup when done), then press **R** in the browser. The UI caches each table for 10
+minutes, so a plain browser reload can still show the pre-refresh numbers.
 
 ### Run from a terminal
 ```bash
@@ -182,7 +189,7 @@ src/mla_dashboard/
                  #   mla_90cl_manual.py (imported 90CL xlsx),
                  #   abs.py (slaughter/meat production), abs_cpi.py (CPI)
 app.py                              # Streamlit dashboard
-Launch Dashboard.vbs                # no-terminal launcher (Windows)
+Launch Dashboard.vbs                # no-terminal launcher (refreshes, then serves)
 Refresh Data.vbs                    # no-terminal incremental refresh
 Refresh Data (Full Backfill).bat    # first-run full pull
 data/parquet/  # committed snapshots the dashboard reads (mla.db is git-ignored)
