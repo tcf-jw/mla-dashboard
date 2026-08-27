@@ -92,6 +92,16 @@ Parquet when no local `mla.db` is present, so the committed data is all the clou
 The local `mla.db` is git-ignored. Workflow: refresh locally → commit updated Parquet →
 cloud auto-redeploys.
 
+`export_parquet()` **merges** into the committed snapshot on each table's natural key
+rather than overwriting it, so the Parquet accumulates. This matters because CI checks out
+a repo with no `mla.db`, so every table there cold-starts from `BACKFILL_START` (2010) and
+rebuilds thinner than the committed file. A plain overwrite silently discarded the
+difference: `lean_beef_prices` lost its 2000-2009 Steiner history and the whole manual MLA
+series (18,783 to 9,818 rows) roughly 20 hours after each manual restore. Fresh rows still
+win on a key collision, so revisions land. The trade-off is that a row genuinely withdrawn
+upstream is never dropped from the snapshot; rerun with `--backfill` to rewrite a span, or
+delete the file to rebuild it from scratch.
+
 ---
 
 ## Data sources
