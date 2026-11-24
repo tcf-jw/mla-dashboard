@@ -59,6 +59,8 @@ def run(backfill: bool = False) -> None:
     )
     print(f"  mla_us_imported (90CL/trim): "
           f"{mla_us_imported.ingest(steiner_start, today, client)} rows ({steiner_start}..)")
+    # AUD 90CL from Steiner + FX, so the AUD series keeps going without the manual xlsx.
+    print(f"  mla_us_imported (AUD 90CL derived): {mla_us_imported.derive_aud_90cl()} rows")
     ams_start = config.BACKFILL_START if backfill else (_from_date("lean_beef_prices", "result_date", False))
     print(f"  usda_ams (90CL/VL): {usda_ams.ingest(ams_start)} rows")
     wb_start = config.BACKFILL_START if backfill else (_from_date("lean_beef_prices", "result_date", False))

@@ -421,8 +421,9 @@ with lean_tab:
         st.plotly_chart(fig, width="stretch")
         st.caption("Chemical-lean (CL) / visual-lean (VL) grades, e.g. 90CL grinding beef. "
                    "MLA imported 90CL is the AU CIF import-parity price (c/kg, manual "
-                   "export); US imported (Steiner) is MLA report 9, quoted US c/lb and "
-                   "refreshed daily; USDA AMS series are US negotiated sales ($/cwt). "
+                   "export); the derived series is the same price rebuilt from Steiner and "
+                   "FX on every refresh; US imported (Steiner) is MLA report 9, quoted US "
+                   "c/lb and refreshed daily; USDA AMS series are US negotiated sales ($/cwt). "
                    "All are normalised to a per-kg basis for comparison.")
         download(sub[["result_date", "grade", "value"]], "lean_beef.csv")
 

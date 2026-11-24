@@ -54,8 +54,9 @@ Tabs (**Lead/Lag** opens first: it is the question the other tabs feed):
   reference for Australian export grinding beef. Three sources, pick via the **Report**
   selector: **US imported (Steiner, weekly)** from MLA report 9 (US c/lb, refreshed
   automatically, the default 90CL source), MLA's indicative **imported 90CL** (AU CIF
-  import-parity, AUD c/kg, manual import, see below), and USDA AMS **US negotiated** sales
-  (USD/cwt). All three are normalised to a **per-kg** basis so grades compare directly.
+  import-parity, AUD c/kg, manual import, see below), the same AUD 90CL **derived** from
+  report 9 on every refresh (see below), and USDA AMS **US negotiated** sales (USD/cwt).
+  All are normalised to a **per-kg** basis so grades compare directly.
 - **Analysis**: AU vs global spread + correlation.
 
 Every chart has a **⬇ Download CSV** button, and the **sidebar** shows per-dataset **data
@@ -134,6 +135,13 @@ over 830 shared weeks, the residual being MLA's RBA rates vs the ECB rates behin
     python -m mla_dashboard.external.mla_90cl_manual
 
 It upserts into `lean_beef_prices` (idempotent) and rewrites `data/parquet/lean_beef_prices.parquet`.
+
+**Imported 90CL (derived):** because the manual export only moves when someone re-exports it,
+every refresh also writes series `MLA imported 90CL (derived, weekly)`, grade `90CL`, AUD
+c/kg: report 9's "90CL Boneless Beef, NZ/Australia" × 2.20462 / date-matched `aud_usd`,
+from 2010 (where `fx_rates` starts) to the latest Steiner week. It sits beside the manual
+series rather than replacing it, and the refresh refuses to write it if the two differ by
+more than 2% on average over their shared weeks.
 
 ### Running in a restricted network (Claude Code on the web, locked-down CI)
 

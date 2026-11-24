@@ -24,13 +24,16 @@ import datetime as dt
 
 import pandas as pd
 
-from .. import config, db
+from .. import analysis, config, db
 from ..client import MLAApiError, MLAClient
 from ..ingest_mla import year_chunks
+from . import mla_90cl_manual
 
 REPORT_ID = 9
 TABLE = "lean_beef_prices"
 SERIES = "US imported (Steiner, weekly)"
+DERIVED_SERIES = "MLA imported 90CL (derived, weekly)"
+PARITY_GRADE = "90CL Boneless Beef, NZ/Australia"
 
 
 def _normalise(rows: list[dict]) -> pd.DataFrame:
@@ -88,6 +91,45 @@ def ingest(
                 print(f"  skip US imported {cf}..{good}: {e2}")
                 continue
         written += db.upsert(TABLE, _normalise(rows), pk=["grade", "series", "result_date"])
+    db.export_parquet(TABLE)
+    return written
+
+
+def derive_aud_90cl() -> int:
+    """Rebuild MLA's AUD import-parity 90CL from the Steiner quote, every refresh.
+
+    The manual series only moves when someone re-exports the portal xlsx (it stalled at
+    2026-06-05), so this keeps an AUD c/kg 90CL current: ``US c/lb * 2.20462 / aud_usd``
+    on date-matched FX. It lands as grade "90CL" under its own ``series`` beside the manual
+    one, and is refused if the two disagree on their shared weeks by more than 2% on
+    average (a units or FX fault), so a wrong number never ships.
+    """
+    # Read the merged snapshot, not mla.db: CI's cold-start DB never holds the manual
+    # series, so the cross-check would have nothing to compare against.
+    path = config.PARQUET_DIR / f"{TABLE}.parquet"
+    fx = analysis.load_fx()
+    if not path.exists() or fx.empty:
+        return 0
+    lb = pd.read_parquet(path)
+    src = lb[(lb["series"] == SERIES) & (lb["grade"] == PARITY_GRADE)]
+    # FX starts 2009-12-31; "nearest" matching would price earlier weeks at that rate.
+    src = src[pd.to_datetime(src["result_date"]) >= fx["date"].min()]
+    aud, _ = analysis.to_per_kg(analysis.to_currency(src, "AUD", "result_date"))
+    out = aud.assign(
+        result_date=aud["result_date"].dt.strftime("%Y-%m-%d"),
+        grade="90CL", series=DERIVED_SERIES, unit="AU c/kg", currency="AUD",
+    )[["result_date", "value", "grade", "series", "unit", "currency"]]
+
+    manual = lb.loc[lb["series"] == mla_90cl_manual.SERIES, ["result_date", "value"]]
+    both = out.merge(manual, on="result_date", suffixes=("", "_manual"))
+    if not both.empty:
+        gap = (both["value"] / both["value_manual"] - 1).abs().mean() * 100
+        print(f"  derived AUD 90CL vs manual: {gap:.2f}% mean gap over {len(both)} weeks")
+        if gap > 2:
+            print("  WARNING: derived AUD 90CL disagrees with the manual series; not written")
+            return 0
+
+    written = db.upsert(TABLE, out, pk=["grade", "series", "result_date"])
     db.export_parquet(TABLE)
     return written
 
