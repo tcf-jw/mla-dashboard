@@ -31,6 +31,12 @@ python -m mla_dashboard.refresh              # later: incremental top-up
 ```
 `run_dashboard.bat` is a visible-console launcher fallback.
 
+### Tests
+```bash
+pip install pytest        # or: pip install -e .[dev]
+python -m pytest          # offline; no API calls, no writes to data/
+```
+
 ---
 
 ## Using the dashboard
